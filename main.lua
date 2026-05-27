@@ -1,43 +1,45 @@
--- ╔══════════════════════════════════════════════════════════════╗
--- ║         BigInt Fibonacci Calculator  ·  CC:Tweaked          ║
--- ║  Computes consecutive Fibonacci numbers of arbitrary size.  ║
--- ║  Saves a checkpoint on exit (Ctrl+T) and resumes from it.   ║
--- ╚══════════════════════════════════════════════════════════════╝
+-- ============================================================
+--   BigInt Fibonacci Calculator  -  CC:Tweaked
+--   Computes consecutive Fibonacci numbers of any size.
+--   Saves a checkpoint on exit (Ctrl+T) and resumes from it.
+-- ============================================================
 
--- ── Configuration ──────────────────────────────────────────────────────────
+-- ---- Configuration -----------------------------------------
 
-local CHECKPOINT_FILE  = "fib_checkpoint"   -- saved in the computer's root
+local CHECKPOINT_FILE  = "fib_checkpoint"  -- saved in the computer root
 local DISPLAY_INTERVAL = 1.0               -- seconds between screen refreshes
 local YIELD_EVERY      = 500               -- iterations between OS yields
 
--- ── BigInt Library ─────────────────────────────────────────────────────────
+-- ---- BigInt Library ----------------------------------------
 --
---  Numbers are stored as Lua arrays of "limbs" in base 10^9 (one billion),
---  least-significant limb first.  e.g. 1_234_567_890 → { 234567890, 1 }
+--  Numbers are stored as Lua arrays of "limbs" in base 10^9
+--  (one billion), least-significant limb first.
+--  e.g. 1,234,567,890 -> { 234567890, 1 }
 --
---  Only addition is needed for Fibonacci, so that is all that is implemented.
+--  Only addition is needed for Fibonacci, so that is all that
+--  is implemented here.
 
-local BASE        = 1000000000   -- 10^9
-local BASE_DIGITS = 9            -- decimal digits per limb
+local BASE        = 1000000000  -- 10^9
+local BASE_DIGITS = 9           -- decimal digits per limb
 
 -- Construct a BigInt from a non-negative integer or decimal string.
 local function bi_new(n)
     local s
     if type(n) == "number" then
-        -- Use string.format to avoid scientific notation on large literals.
+        -- Use string.format to avoid scientific notation on large values.
         s = string.format("%.0f", n)
     else
         s = tostring(n)
     end
-    -- Strip leading zeros and whitespace.
+    -- Strip leading zeros and surrounding whitespace.
     s = s:match("^%s*0*(%d*)%s*$") or "0"
     if s == "" then s = "0" end
 
     local limbs = {}
     while #s > 0 do
         local lo    = math.max(1, #s - BASE_DIGITS + 1)
-        local chunk = s:sub(lo)           -- up to BASE_DIGITS digits from right
-        s           = s:sub(1, lo - 1)   -- remainder
+        local chunk = s:sub(lo)          -- up to BASE_DIGITS digits from right
+        s           = s:sub(1, lo - 1)  -- remainder
         limbs[#limbs + 1] = tonumber(chunk)
     end
     return limbs
@@ -46,10 +48,10 @@ end
 -- Convert a BigInt to its decimal string representation.
 local function bi_str(a)
     if #a == 0 then return "0" end
-    local parts = { tostring(a[#a]) }   -- most-significant limb (no padding)
+    local parts = { tostring(a[#a]) }  -- most-significant limb (no padding)
     for i = #a - 1, 1, -1 do
         local s = tostring(a[i])
-        -- Pad with leading zeros so every non-top limb is exactly BASE_DIGITS wide.
+        -- Pad so every non-top limb is exactly BASE_DIGITS wide.
         parts[#parts + 1] = string.rep("0", BASE_DIGITS - #s) .. s
     end
     return table.concat(parts)
@@ -63,12 +65,12 @@ local function bi_add(a, b)
 
     for i = 1, len do
         local s = (a[i] or 0) + (b[i] or 0) + carry
-        -- Integer division / modulo without the % operator to stay fast.
+        -- Avoid the modulo operator in the hot path for speed.
         if s >= BASE then
-            carry    = 1
+            carry     = 1
             result[i] = s - BASE
         else
-            carry    = 0
+            carry     = 0
             result[i] = s
         end
     end
@@ -87,9 +89,9 @@ local function bi_digit_count(a)
     return (#a - 1) * BASE_DIGITS + #tostring(a[#a])
 end
 
--- ── Checkpoint I/O ─────────────────────────────────────────────────────────
+-- ---- Checkpoint I/O ----------------------------------------
 
--- Write the two-value Fibonacci state (prev, curr, index n) to disk.
+-- Write the Fibonacci state (prev, curr, index n) to disk.
 local function save_checkpoint(prev, curr, n)
     local f = fs.open(CHECKPOINT_FILE, "w")
     if not f then
@@ -128,54 +130,60 @@ local function load_checkpoint()
     return bi_new(prev_str), bi_new(curr_str), n
 end
 
--- ── Terminal Display ────────────────────────────────────────────────────────
+-- ---- Terminal Display --------------------------------------
 
 local W = term.getSize()
 
--- Draw a labelled row, truncating the value to fit the terminal width.
+-- Draw a labelled row, truncating the value if it is too wide.
 local function draw_row(label, value, colour)
     local prefix = label .. ": "
     local space  = W - #prefix
     local v      = tostring(value)
     if #v > space then
         -- Show the trailing digits (most interesting for large numbers).
-        v = "…" .. v:sub(-(space - 1))
+        v = "..." .. v:sub(-(space - 3))
     end
     term.setTextColour(colour or colours.white)
     print(prefix .. v)
 end
 
--- Full screen refresh showing the current computation state.
+-- Full-screen refresh showing the current computation state.
 local function redraw(n, curr, rate, elapsed_s)
     term.clear()
     term.setCursorPos(1, 1)
 
+    -- Header bar
+    local title = "  BigInt Fibonacci - CC:Tweaked  "
+    local pad   = math.floor((W - #title) / 2)
     term.setTextColour(colours.yellow)
-    print(("═"):rep(W))
-    term.setCursorPos(math.floor((W - 26) / 2) + 1, 1)
-    term.write("  BigInt Fibonacci · CC:Tweaked  ")
+    print(string.rep("=", W))
+    term.setCursorPos(pad + 1, 1)
+    term.write(title)
     term.setCursorPos(1, 2)
-    print(("═"):rep(W))
+    print(string.rep("=", W))
     term.setTextColour(colours.white)
 
-    draw_row("  Index  ", n,                         colours.cyan)
-    draw_row("  Digits ", bi_digit_count(curr),      colours.cyan)
-    draw_row("  Rate   ", string.format("%.1f iter/s", rate), colours.cyan)
+    -- Stats
+    draw_row("  Index  ", n,                                          colours.cyan)
+    draw_row("  Digits ", bi_digit_count(curr),                       colours.cyan)
+    draw_row("  Rate   ", string.format("%.1f iter/s", rate),         colours.cyan)
     draw_row("  Uptime ", string.format("%ds", math.floor(elapsed_s)), colours.cyan)
 
     term.setTextColour(colours.yellow)
-    print(("─"):rep(W))
+    print(string.rep("-", W))
     term.setTextColour(colours.white)
-    draw_row("  F(n)   ", bi_str(curr),              colours.lightBlue)
+
+    -- Current value (trailing digits if too wide)
+    draw_row("  F(n)   ", bi_str(curr), colours.lightBlue)
 
     term.setTextColour(colours.yellow)
-    print(("─"):rep(W))
+    print(string.rep("-", W))
     term.setTextColour(colours.red)
     print("  Press Ctrl+T to stop and save checkpoint.")
     term.setTextColour(colours.white)
 end
 
--- ── Main ───────────────────────────────────────────────────────────────────
+-- ---- Main --------------------------------------------------
 
 -- Banner shown at startup before entering the compute loop.
 local function startup_message(resumed, n, digits)
@@ -183,7 +191,7 @@ local function startup_message(resumed, n, digits)
     term.setCursorPos(1, 1)
     term.setTextColour(colours.yellow)
     print("BigInt Fibonacci Calculator")
-    print(("─"):rep(W))
+    print(string.rep("-", W))
     term.setTextColour(colours.white)
     if resumed then
         print(string.format("Resuming from checkpoint at F(%d).", n))
@@ -193,7 +201,7 @@ local function startup_message(resumed, n, digits)
     end
     print("")
     term.setTextColour(colours.lightGrey)
-    print("Computation will begin shortly…")
+    print("Computation will begin shortly...")
     term.setTextColour(colours.white)
     os.sleep(1.5)
 end
@@ -205,20 +213,20 @@ local resumed        = fs.exists(CHECKPOINT_FILE)
 startup_message(resumed, n, bi_digit_count(curr))
 
 -- Timing bookkeeping.
-local start_time   = os.clock()
-local last_draw    = start_time - DISPLAY_INTERVAL   -- draw immediately
-local rate_time    = start_time
-local rate_iters   = 0
-local rate         = 0.0
+local start_time = os.clock()
+local last_draw  = start_time - DISPLAY_INTERVAL  -- force draw on first tick
+local rate_time  = start_time
+local rate_iters = 0
+local rate       = 0.0
 
--- Main computation loop.  pcall lets us catch the Terminate signal cleanly.
+-- Main computation loop.  pcall lets us catch Terminate cleanly.
 local terminated = false
 
 local ok, err = pcall(function()
     local iter = 0
 
     while true do
-        -- ── Fibonacci step ──────────────────────────────────────────
+        -- Fibonacci step
         local next_val = bi_add(prev, curr)
         prev = curr
         curr = next_val
@@ -227,12 +235,12 @@ local ok, err = pcall(function()
         iter       = iter + 1
         rate_iters = rate_iters + 1
 
-        -- ── Periodic yield to prevent "too long without yielding" ───
+        -- Yield periodically to prevent "too long without yielding" crash.
         if iter % YIELD_EVERY == 0 then
-            os.sleep(0)   -- suspends for one game tick, then resumes
+            os.sleep(0)  -- suspends for one game tick, then resumes
         end
 
-        -- ── Periodic display refresh ────────────────────────────────
+        -- Refresh the display once per DISPLAY_INTERVAL seconds.
         local now = os.clock()
         if now - last_draw >= DISPLAY_INTERVAL then
             local elapsed = now - rate_time
@@ -247,27 +255,26 @@ local ok, err = pcall(function()
     end
 end)
 
--- Determine whether we stopped due to Ctrl+T or an unexpected error.
+-- Check whether we stopped due to Ctrl+T or an unexpected error.
 if err then
-    local s = tostring(err)
-    if s:find("Terminated") then
+    if tostring(err):find("Terminated") then
         terminated = true
     end
 end
 
--- ── Shutdown / Checkpoint Save ─────────────────────────────────────────────
+-- ---- Shutdown / Checkpoint Save ----------------------------
 
 term.clear()
 term.setCursorPos(1, 1)
 term.setTextColour(colours.yellow)
-print("Saving checkpoint…")
+print("Saving checkpoint...")
 term.setTextColour(colours.white)
 
 local saved = save_checkpoint(prev, curr, n)
 
 if saved then
     term.setTextColour(colours.lime)
-    print(string.format("Saved F(%d) — %d digit(s).", n, bi_digit_count(curr)))
+    print(string.format("Saved F(%d) with %d digit(s).", n, bi_digit_count(curr)))
     print("Run this script again to resume.")
 else
     term.setTextColour(colours.red)
@@ -277,7 +284,7 @@ end
 term.setTextColour(colours.white)
 print("")
 
--- Re-raise unexpected errors so the user can see them.
+-- Re-raise any unexpected errors so the user can see them.
 if not terminated and err then
     error(err, 0)
 end
