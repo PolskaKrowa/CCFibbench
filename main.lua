@@ -84,7 +84,7 @@ end
 
 -- Return the number of decimal digits in a BigInt.
 local function bi_digit_count(a)
-    if #a == 0 then return 1 end
+    if not a or #a == 0 then return 1 end
     -- All limbs except the top are exactly BASE_DIGITS digits wide.
     return (#a - 1) * BASE_DIGITS + #tostring(a[#a])
 end
