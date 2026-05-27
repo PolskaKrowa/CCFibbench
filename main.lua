@@ -1,3 +1,9 @@
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║         BigInt Fibonacci Calculator  ·  CC:Tweaked          ║
+-- ║  Computes consecutive Fibonacci numbers of arbitrary size.  ║
+-- ║  Saves a checkpoint on exit (Ctrl+T) and resumes from it.   ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
 -- ── Configuration ──────────────────────────────────────────────────────────
 
 local CHECKPOINT_FILE  = "fib_checkpoint"   -- saved in the computer's root
@@ -100,14 +106,12 @@ end
 -- Read a previously saved checkpoint.
 -- Returns (prev, curr, n) on success, or seed values if none exists.
 local function load_checkpoint()
-    local defaults = bi_new(0), bi_new(1), 1
-
     if not fs.exists(CHECKPOINT_FILE) then
-        return defaults
+        return bi_new(0), bi_new(1), 1
     end
 
     local f = fs.open(CHECKPOINT_FILE, "r")
-    if not f then return defaults end
+    if not f then return bi_new(0), bi_new(1), 1 end
 
     local n_str    = f.readLine()
     local prev_str = f.readLine()
@@ -115,11 +119,11 @@ local function load_checkpoint()
     f.close()
 
     if not (n_str and prev_str and curr_str) then
-        return defaults
+        return bi_new(0), bi_new(1), 1
     end
 
     local n = tonumber(n_str)
-    if not n then return defaults end
+    if not n then return bi_new(0), bi_new(1), 1 end
 
     return bi_new(prev_str), bi_new(curr_str), n
 end
